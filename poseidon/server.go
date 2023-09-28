@@ -88,7 +88,7 @@ func (server *Server) ServeConn(conn io.ReadWriteCloser) {
 		log.Printf("rpc server: invalid codec type %s", opt.CodecType)
 		return
 	}
-	// 把 conn 用编码方法包一下, 给到 serveCodec
+	// 开始解码请求
 	server.serveCodec(f(conn))
 }
 

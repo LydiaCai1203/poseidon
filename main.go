@@ -1,15 +1,15 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net"
-	"poseidon/codec"
 	"poseidon/poseidon"
+	"sync"
 	"time"
 )
 
+// 起一个 tcp 服务端等待并处理连接请求
 func startServer(addr chan string) {
 	// :0 表示让操作系统随机分配一个可用端口号
 	l, err := net.Listen("tcp", ":0")
@@ -22,31 +22,28 @@ func startServer(addr chan string) {
 }
 
 func main() {
+	log.SetFlags(0)
 	addr := make(chan string)
 	go startServer(addr)
 
-	// 建立连接
-	conn, _ := net.Dial("tcp", <-addr)
+	client, _ := poseidon.Dial("tcp", <-addr)
 	defer func() {
-		_ = conn.Close()
+		_ = client.Close()
 	}()
 
 	time.Sleep(time.Second)
-	// 写了一个 option
-	// 将 DefaultOption 对象编码成 JSON 传到 conn 里去
-	_ = json.NewEncoder(conn).Encode(poseidon.DefaultOption)
-	cc := codec.NewGobCodec(conn)
+	var wg sync.WaitGroup
 	for i := 0; i < 5; i++ {
-		h := &codec.Header{
-			ServiceMethod: "Foo.Sum",
-			Seq:           uint64(i),
-		}
-		// 写了一个 header 和 body
-		_ = cc.Write(h, fmt.Sprintf("rpc %d", h.Seq))
-		// 读取响应
-		_ = cc.ReadHeader(h)
-		var reply string
-		_ = cc.ReadBody(&reply)
-		log.Println("reply:", reply)
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			args := fmt.Sprintf("rpc req %d", i)
+			var reply string
+			if err := client.Call("Foo.Sum", args, &reply); err != nil {
+				log.Fatal("call Foo.Sum error:", err)
+			}
+			log.Println("reply:", reply)
+		}(i)
 	}
+	wg.Wait()
 }
